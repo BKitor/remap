@@ -74,14 +74,15 @@ void _print_topo(int rank, int comm_size, int* arr){
 int _set_niagara_hdr_topo_info(struct ompi_communicator_t *comm, mca_coll_remap_module_t  *module){
     int *hostnums, rank, size, loc_sum, i, wing=0, leaf=0, ret;
     char node_val[5];
-    const char *hostname_str;
+    char hostname_str[64];
 
     rank = ompi_comm_rank(comm);
     size = ompi_comm_size(comm);
     hostnums = calloc(size, sizeof(int));
 
     // hostname_str = getenv("HOSTNAME");
-    hostname_str = opal_gethostname();
+    // hostname_str = opal_gethostname();
+    gethostname(hostname_str, sizeof(hostname_str));
     memcpy(node_val, hostname_str+3, 4);
     node_val[4]='\0';
     hostnums[rank] = atoi(node_val);
