@@ -40,7 +40,8 @@ mca_coll_remap_component_t mca_coll_remap_component = {
     .select_allreduce_alg = 0,
     .select_bcast_alg = 0,
     .turn_off_remap = 0,
-    .enable_net_topo = 0,
+    .cc_cluster = 0,
+    .net_topo_input_mat = NULL,
 };
 
 static int remap_open(void){
@@ -90,9 +91,15 @@ static int remap_register(void){
                                             &(mca_coll_remap_component.turn_off_remap));
 
     (void) mca_base_component_var_register(&mca_coll_remap_component.super.collm_version,
-                                            "enable_net_topo", "A-B testing var for netowrk topology",
+                                            "cc_cluster", "compute canada cluster {null, 1:niagara, 2:mist, 3:cedar, 4:mist, 5:beluga}",
                                             MCA_BASE_VAR_TYPE_INT, NULL, 0, 0, OPAL_INFO_LVL_6, 
                                             MCA_BASE_VAR_SCOPE_READONLY,
-                                            &(mca_coll_remap_component.enable_net_topo));
+                                            &(mca_coll_remap_component.cc_cluster));
+
+    (void) mca_base_component_var_register(&mca_coll_remap_component.super.collm_version,
+                                            "net_topo_input_mat", "absolute localtino of matrix file with network topology",
+                                            MCA_BASE_VAR_TYPE_STRING, NULL, 0, 0, OPAL_INFO_LVL_6,
+                                            MCA_BASE_VAR_SCOPE_READONLY,
+                                            &(mca_coll_remap_component.net_topo_input_mat));
     return OMPI_SUCCESS;
 }

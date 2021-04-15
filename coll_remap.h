@@ -57,7 +57,8 @@ typedef struct mca_coll_remap_component_t{
     int select_allreduce_alg;
     int select_bcast_alg;
     int turn_off_remap;
-    int enable_net_topo;
+    int cc_cluster;
+    char* net_topo_input_mat;
 } mca_coll_remap_component_t;
 
 OMPI_MODULE_DECLSPEC extern mca_coll_remap_component_t mca_coll_remap_component;
@@ -113,6 +114,16 @@ enum MCA_COLL_REMAP_BCAST_ALG{
     REMAP_BCAST_ALG_SCATTER_ALLGATHER,
     REMAP_BCAST_ALG_SCATTER_ALLGATHER_RING,
     REMAP_BCAST_ALG_COUNT
+};
+
+enum REMAP_CC_CLUSTERS{
+    CC_NULL=0,
+    CC_NIAGARA,
+    CC_MIST,
+    CC_CEDAR,
+    CC_GRAHAM,
+    CC_BELUGA,
+    CC_CLUSTER_COUNT
 };
 
 int remap_bcast_pick_alg(int count, struct ompi_datatype_t *datatype,  

@@ -18,9 +18,9 @@ endif
 mcacomponentdir = $(ompilibdir)
 mcacomponent_LTLIBRARIES = $(component_install)
 mca_coll_remap_la_SOURCES = $(sources)
-mca_coll_remap_la_LDFLAGS = -module -avoid-version
+mca_coll_remap_la_LDFLAGS = -module -avoid-version -libverbs
 mca_coll_remap_la_LIBADD = $(top_builddir)/ompi/lib@OMPI_LIBMPI_NAME@.la
 
 noinst_LTLIBRARIES = $(component_noinst)
 libmca_coll_remap_la_SOURCES =$(sources)
-libmca_coll_remap_la_LDFLAGS = -module -avoid-version
+libmca_coll_remap_la_LDFLAGS = -module -avoid-version -libverbs
