@@ -349,6 +349,7 @@ void _rec_knom_mapping(int rr, int rc, int world_size, int comm_size, int radix,
     return;
 }
 
+// This is the recursive doubling heuristic form Hessam's work
 int remap_bcast_scatter_allgather_remap(struct ompi_communicator_t *old_comm,
                                         mca_coll_remap_module_t *module,
                                         struct ompi_communicator_t **new_comm)

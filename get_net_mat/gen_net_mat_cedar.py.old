@@ -1,0 +1,217 @@
+#!/home/bkitor/Projects/.venv/bin/python
+import xml.etree.ElementTree as ET
+import argparse
+import re
+import pprint
+import sys
+from functools import partial
+from multiprocessing import Manager, Pool
+
+pp = pprint.PrettyPrinter()
+
+
+def main():
+    topo_f_name, lids_f_name, num_procs = parse_input()
+
+    with Manager() as manager, Pool(processes=num_procs) as pool:
+
+        # swithc stack is {"node":guid, "hc":int}
+        hop_byte_dict = manager.dict()
+
+        rx = re.compile(
+            r'(?P<lid>0[xX][0-9a-fA-F]+)\s*(?P<guid>0[xX][0-9a-fA-F]+)\s*\d\s*(?P<type>\w\w)', re.MULTILINE)
+
+        with open(lids_f_name) as lids_file:
+            lid_2_guid_dict = {
+                match.group('lid'): match.group('guid')
+                for match in rx.finditer(lids_file.read())
+            }
+            lids_file.seek(0)
+            guid_2_lid_dict = {
+                match.group('guid'): match.group('lid')
+                for match in rx.finditer(lids_file.read())
+            }
+
+        down_nodes = [
+            '0x001175090107e06a',
+            '0x001175090107e089',
+            '0x00117509013ac035',
+            '0x001175010176f441',
+            '0x00117501017679a5',
+            '0x00117501017a8beb',
+        ]
+
+        for n in down_nodes:
+            guid_2_lid_dict[n] = '0x0000'
+            guid_2_lid_dict['0x0000'] = n
+
+        print(f"num lids {len(guid_2_lid_dict)}")
+
+        tree = ET.parse(topo_f_name)
+        root = tree.getroot()
+
+        fi_list = root.find("Nodes").find("FIs").findall("Node")
+        link_list = root.find("LinkSummary").findall("Link")
+
+        find_hb_partial = partial(find_hop_bytes, guid_2_lid_dict, link_list)
+        hop_byte_arr = pool.map(find_hb_partial, fi_list)
+
+        hop_byte_dict, max_hb = refactor_map_arr_to_dict(hop_byte_arr)
+        max_hb += 1
+        # print(hop_byte_dict)
+        print_output_mat(lid_2_guid_dict, hop_byte_dict, max_hb)
+
+
+# translates [{"guid":"", "data":{}, "max_hb":#}, ...] to -> {"<guid>":{...}, ...}, max_hb
+def refactor_map_arr_to_dict(hop_byte_arr):
+    ret_dict = {}
+    max_hb_arr = []
+    for d in hop_byte_arr:
+        ret_dict[d["guid"]] = d["data"]
+        max_hb_arr.append(d["max_hb"])
+    return ret_dict, max(max_hb_arr)
+
+
+def print_output_mat(l2g_dict, hop_byte_dict, max_hb):
+    max_lid = max(l2g_dict.keys())
+    max_lid_num = int(max_lid, 16)
+
+    def z_line(lid):
+        return (
+            "00 " * (lid) + "{0:02} ".format(max_hb) + "00 " * (max_lid_num - lid - 1))
+
+    for i in range(0, max_lid_num):
+        lid_k = "{0:#0{1}x}".format(i, 6)
+        if lid_k not in l2g_dict:
+            print(z_line(i))
+            pass
+        else:
+            hop_byte_k = l2g_dict[lid_k]
+            if hop_byte_k not in hop_byte_dict:
+                print(z_line(i))
+                pass
+            else:
+                outsrt = ""
+                inner_hop_byte_dict = hop_byte_dict[hop_byte_k]
+                for j in range(0, max_lid_num):
+                    inner_lid_k = "{0:#0{1}x}".format(j, 6)
+                    if inner_lid_k not in inner_hop_byte_dict:
+                        outsrt += "00 "
+                    elif inner_lid_k == lid_k:
+                        outsrt += "{0:02} ".format(max_hb)
+                    else:
+                        outsrt += "{0:02} ".format(
+                            max_hb - inner_hop_byte_dict[inner_lid_k])
+
+                print(outsrt)
+
+
+# parses input and retunrs tuple (topo file name, lids file name)
+def parse_input():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "-j", "--jobs", help="num processes in multiprocessing.pool", default=4)
+    parser.add_argument("-t", "--topo", help="topo-file (opa_topo.xml)")
+    parser.add_argument(
+        "-l", "--lids", help="lid-file (Feb-16-opareport-lids.txt)")
+    args = parser.parse_args()
+
+    if args.topo is None:
+        print("need to pass in a file with -t/--topo")
+        exit()
+
+    if args.lids is None:
+        print("need to pass in a file with -l/--lids")
+        exit()
+    return (args.topo, args.lids, int(args.jobs))
+
+
+# takes a guid, and the list of all links and returns an array of all the links connected to it
+def find_links(guid, link_list):
+    ret_arr = []
+    for link in link_list:
+        p1, p2 = link.findall("Port")
+        if p1.find("NodeGUID").text == guid or p2.find("NodeGUID").text == guid:
+            ret_arr.append(link)
+    return ret_arr
+
+
+# Takes's an FI's GUID and return it's connected switch GUID
+def find_starting_switch(fi_guid, link_list):
+    for tmp_l in link_list:
+        p1, p2 = tmp_l.findall("Port")
+        guid1 = p1.find("NodeGUID").text
+        guid2 = p2.find("NodeGUID").text
+        if guid1 == fi_guid or guid2 == fi_guid:
+            tmp_s = guid1 if guid1 != fi_guid else guid2
+    return tmp_s
+
+
+def print_hop_byte_counts(Node, hop_byte_dict):
+    n_desc = Node.find("NodeDesc").text
+    tmp_print_dict = {}
+    for k in hop_byte_dict:
+        if hop_byte_dict[k] not in tmp_print_dict:
+            tmp_print_dict[hop_byte_dict[k]] = 0
+        else:
+            tmp_print_dict[hop_byte_dict[k]] += 1
+
+    print(n_desc, tmp_print_dict, flush=True, file=sys.stderr)
+
+
+# takes the list of links, the global dict, an FI Node, and populates the global dict with the FI node's hops
+# def find_hop_bytes(link_list, hop_byte_dict, fi_node):
+def find_hop_bytes(g2l_dict, link_list, fi_node):
+    fi_guid = fi_node.find("NodeGUID").text
+    switch_stack = []
+    switch_stack.append(
+        {"node_guid": find_starting_switch(fi_guid, link_list), "hop_count": 1})
+    local_dict = {}
+    max_hb_arr = []
+    _rec_func(
+        from_node_guid=fi_guid,
+        hop_byte_dict=local_dict,
+        switch_stack=switch_stack,
+        visited_nodes=[],
+        link_list=link_list,
+        g2l_dict=g2l_dict,
+        max_hb_arr=max_hb_arr)
+
+    print_hop_byte_counts(fi_node, local_dict)
+    return {"guid": fi_guid, "data": local_dict, "max_hb": max(max_hb_arr)}
+
+
+# Walks the topology and fills out the hop counts for a specified node
+def _rec_func(from_node_guid, hop_byte_dict, switch_stack, visited_nodes, link_list, g2l_dict, max_hb_arr):
+    current_state = switch_stack.pop()
+    hop_count = current_state["hop_count"]
+    current_guid = current_state["node_guid"]
+
+    visited_nodes.append(current_guid)
+    s_links = find_links(current_guid, link_list)
+
+    for link in s_links:
+        p1, p2 = link.findall("Port")
+        remote = p1 if p1.find("NodeGUID").text != current_guid else p2
+        remote_guid = remote.find("NodeGUID").text
+
+        if remote.find("NodeType").text == "FI":
+            hop_byte_dict[g2l_dict[remote_guid]] = hop_count + 1
+            max_hb_arr.append(hop_count + 1)
+
+        elif remote.find("NodeType").text == "SW":
+            if remote_guid not in visited_nodes:
+                visited_nodes.append(remote_guid)
+                switch_stack.append(
+                    {"node_guid": remote_guid, "hop_count": hop_count + 1})
+
+        else:
+            print("WARNING BAD NODE TYPE")
+
+    if switch_stack:
+        _rec_func(from_node_guid, hop_byte_dict, switch_stack,
+                  visited_nodes, link_list, g2l_dict, max_hb_arr)
+
+
+if __name__ == '__main__':
+    main()
