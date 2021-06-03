@@ -11,6 +11,7 @@
 #include "opal/mca/hwloc/base/base.h"
 
 int _set_cedar_topo_info(struct ompi_communicator_t *comm, mca_coll_remap_module_t *module, int my_lid);
+int _set_beluga_topo_info(struct ompi_communicator_t *comm, mca_coll_remap_module_t *module, int my_lid);
 int _set_niagara_hdr_topo_info(struct ompi_communicator_t *comm, mca_coll_remap_module_t *module);
 void _print_topo(int rank, int comm_size, int *arr);
 int _get_ib_dev_lid();
@@ -69,6 +70,9 @@ int mca_coll_remap_set_proc_locality_info(struct ompi_communicator_t *comm,
             break;
         case CC_CEDAR:
             _set_cedar_topo_info(comm, module, first_device_lid);
+            break;
+        case CC_BELUGA:
+            _set_beluga_topo_info(comm, module, first_device_lid);
             break;
         default:
             break;
@@ -252,6 +256,46 @@ int _set_cedar_topo_info(struct ompi_communicator_t *comm, mca_coll_remap_module
     for(int i = 0; i<size; i++){
         if (i == rank)continue;
         fseek(f_topo, rank_lid_idx + 3*lid_arr[i], SEEK_SET);
+        fscanf(f_topo,"%d", &tmp);
+        // printf("rank_lid_idx = %d,found hop count:%d for LID:%d\n",rank_lid_idx, tmp, lid_arr[i]);
+
+        module->proc_locality_arr[size * rank + i] += tmp;
+    }
+
+    fclose(f_topo);
+    free(lid_arr);
+    return MPI_SUCCESS;
+}
+
+int _set_beluga_topo_info(struct ompi_communicator_t *comm, mca_coll_remap_module_t *module, int my_lid){
+    // Read a file from mca_coll_remap_component.net_topo_input_mat, and increase module->proc_locality_arr based on the contents
+    // The file should be an LID X LID matrix, with (1-maxhops) between each lid
+    // each point of data is 2 char (a digit and a space)
+    // each row is going to be (2*num_lids + 1) chars long
+    // the first line of the file is number for the total number of LIDs
+    int size = ompi_comm_size(comm);
+    int rank = ompi_comm_rank(comm);
+
+    int* lid_arr = malloc(size*sizeof(int));
+    lid_arr[rank] = my_lid;
+    
+    if(OMPI_SUCCESS != ompi_coll_base_allgather_intra_ring(MPI_IN_PLACE, 1, MPI_INT, lid_arr, 1, MPI_INT, comm, &(module->super))){
+        free(lid_arr);
+        return OMPI_ERROR;
+    }
+
+    FILE *f_topo = fopen(mca_coll_remap_component.net_topo_input_mat, "r");
+
+    int numlines, tmp;
+    fscanf(f_topo, "%d\n", &numlines);
+    long rank_lid_idx = (numlines*2 + 1)*(my_lid);
+    fseek(f_topo, rank_lid_idx, SEEK_CUR);
+    rank_lid_idx = ftell(f_topo);
+
+    // for(int i = 0; i<size+1; i++){
+    for(int i = 0; i<size; i++){
+        if (i == rank)continue;
+        fseek(f_topo, rank_lid_idx + 2*lid_arr[i], SEEK_SET);
         fscanf(f_topo,"%d", &tmp);
         // printf("rank_lid_idx = %d,found hop count:%d for LID:%d\n",rank_lid_idx, tmp, lid_arr[i]);
 
