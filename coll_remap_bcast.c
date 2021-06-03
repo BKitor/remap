@@ -310,7 +310,7 @@ int remap_bcast_knomial_remap(struct ompi_communicator_t *old_comm,
         free(mapping);
         return OMPI_ERROR;
     }
-    OPAL_OUTPUT((ompi_coll_remap_stream, "coll:remap:bcast KNOMIAL rank %d on core %d", ompi_comm_rank(*new_comm), rank));
+    OPAL_OUTPUT((ompi_coll_remap_stream, "coll:remap:bcast KNOMIAL rank %d on core %d (from mapping %d)", ompi_comm_rank(*new_comm), rank, mapping[rank]));
     free(mapping);
     return OMPI_SUCCESS;
 }
@@ -397,7 +397,7 @@ int remap_bcast_scatter_allgather_remap(struct ompi_communicator_t *old_comm,
         free(mapping);
         return OMPI_ERROR;
     }
-    OPAL_OUTPUT((ompi_coll_remap_stream, "coll:remap:bcast SC_AG rank %d mapped to core %d", ompi_comm_rank(*new_comm), rank));
+    OPAL_OUTPUT((ompi_coll_remap_stream, "coll:remap:bcast SC_AG rank %d mapped to core %d, (from mapping %d)", ompi_comm_rank(*new_comm), rank, mapping[rank]));
     free(mapping);
     return OMPI_SUCCESS;
 }
@@ -418,10 +418,10 @@ int remap_bcast_bintree_remap(struct ompi_communicator_t *old_comm,
 
     for (int i = 0; i < comm_size; i++)
         mapping[i] = -1;
-    // mapping[0] = 0;
+    mapping[0] = 0;
 
-    // _rec_bintree_mapping(0, 0, comm_size, topo_info, mapping);
-    _rec_bintree_mapping_2(0, 0, comm_size, topo_info, mapping);
+    _rec_bintree_mapping(0, 0, comm_size, topo_info, mapping);
+    // _rec_bintree_mapping_2(0, 0, comm_size, topo_info, mapping);
 
     if (OMPI_SUCCESS != mca_coll_remap_create_new_cached_comm(old_comm, mapping, new_comm))
     {
@@ -430,7 +430,7 @@ int remap_bcast_bintree_remap(struct ompi_communicator_t *old_comm,
         return OMPI_ERROR;
     }
     // OPAL_OUTPUT((ompi_coll_remap_stream, "coll:remap:bcast BINTREE rank %d mapped to core %d", rank, mapping[rank]));
-    OPAL_OUTPUT((ompi_coll_remap_stream, "coll:remap:bcast BINTREE rank %d bound to core %d", ompi_comm_rank(*new_comm), rank));
+    OPAL_OUTPUT((ompi_coll_remap_stream, "coll:remap:bcast BINTREE rank %d bound to core %d (from mapping %d)", ompi_comm_rank(*new_comm), rank, mapping[rank]));
     free(mapping);
     return OMPI_SUCCESS;
 }
@@ -468,6 +468,7 @@ static int calculate_level(int fanout, int rank)
     return level - 1;
 }
 
+// classinc bintree mapping, as written in paper
 void _rec_bintree_mapping(int rr, int rc, int comm_size, int *topo_info, int *mapping)
 {
     int l, d, c1, c2, tmp_core;
@@ -490,20 +491,24 @@ void _rec_bintree_mapping(int rr, int rc, int comm_size, int *topo_info, int *ma
     // printf("tmp_core:%d, rr:%d, c2:%d \n", tmp_core, rr, c2);
 }
 
-int _rec_bintree_mapping_2(int rr, int nxt_c, int comm_size, int *topo_info, int *mapping)
+// possibly faster bintree mapping, where c2 mapped before c1
+int _rec_bintree_mapping_2(int rr, int rc, int comm_size, int *topo_info, int *mapping)
 {
-    int l, d, c1, c2, core_tmp = nxt_c;
+    int l, d, c1, c2, tmp_core;
     l = calculate_level(2, rr);
     d = pown(2, l);
     c1 = rr + d;
     c2 = rr + 2 * d;
-    if (c1 < comm_size)
-        core_tmp = _rec_bintree_mapping_2(c1, core_tmp, comm_size, topo_info, mapping);
-    mapping[core_tmp] = rr;
-    core_tmp = _find_closest_core(core_tmp, comm_size, mapping, topo_info);
-    if (c2 < comm_size)
-        core_tmp = _rec_bintree_mapping_2(c2, core_tmp, comm_size, topo_info, mapping);
-    return core_tmp;
+    if (c2 < comm_size){
+        tmp_core = _find_closest_core(rc, comm_size, mapping, topo_info);
+        mapping[tmp_core] = c2;
+        _rec_bintree_mapping_2(c2, tmp_core, comm_size, topo_info, mapping);
+    }
+    if (c1 < comm_size){
+        tmp_core = _find_closest_core(rc, comm_size, mapping, topo_info);
+        mapping[tmp_core] = c1;
+        _rec_bintree_mapping_2(c1, tmp_core, comm_size, topo_info, mapping);
+    }
 }
 
 int remap_bcast_pick_alg(int count, struct ompi_datatype_t *datatype,
