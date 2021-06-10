@@ -7,7 +7,8 @@
 #include "ompi/mca/coll/base/base.h"
 #include "ompi/mca/coll/base/coll_base_functions.h"
 
-static void mca_coll_remap_module_construct(mca_coll_remap_module_t *module){
+static void mca_coll_remap_module_construct(mca_coll_remap_module_t *module)
+{
     module->proc_locality_arr = NULL;
 
     module->cached_allreduce_comm = NULL;
@@ -15,30 +16,40 @@ static void mca_coll_remap_module_construct(mca_coll_remap_module_t *module){
 
     module->cached_base_data = NULL;
 
+    module->scotch_bcast_new_root = NULL;
+
     module->fallback_allreduce_fn = NULL;
     module->fallback_allreduce_module = NULL;
     module->fallback_bcast_fn = NULL;
     module->fallback_bcast_module = NULL;
 }
 
-static void mca_coll_remap_module_destruct(mca_coll_remap_module_t *module){
+static void mca_coll_remap_module_destruct(mca_coll_remap_module_t *module)
+{
     int i;
+
+    free(module->scotch_bcast_new_root); // free scotch bcast new roots
+    module->scotch_bcast_new_root = NULL;
 
     /* free proc locality info */
     free(module->proc_locality_arr);
     module->proc_locality_arr = NULL;
 
     /* release cached communicators */
-    for(i = 0; i < REMAP_ALLREDUCE_ALG_COUNT; i++){
-        if(NULL != module->cached_allreduce_comm[i]){
+    for (i = 0; i < REMAP_ALLREDUCE_ALG_COUNT; i++)
+    {
+        if (NULL != module->cached_allreduce_comm[i])
+        {
             ompi_comm_free(&(module->cached_allreduce_comm[i]));
             module->cached_allreduce_comm[i] = NULL;
         }
     }
     free(module->cached_allreduce_comm);
 
-    for(i = 0; i < REMAP_BCAST_ALG_COUNT; i++){
-        if(NULL != module->cached_bcast_comm[i]){
+    for (i = 0; i < REMAP_BCAST_ALG_COUNT; i++)
+    {
+        if (NULL != module->cached_bcast_comm[i])
+        {
             ompi_comm_free(&(module->cached_bcast_comm[i]));
             module->cached_bcast_comm[i] = NULL;
         }
@@ -50,46 +61,52 @@ static void mca_coll_remap_module_destruct(mca_coll_remap_module_t *module){
 
     /* release fallback modules & functions */
     module->fallback_allreduce_fn = NULL;
-    if(NULL != module->fallback_allreduce_module){
+    if (NULL != module->fallback_allreduce_module)
+    {
         OBJ_RELEASE(module->fallback_allreduce_module);
     }
     module->fallback_allreduce_module = NULL;
 
     module->fallback_bcast_fn = NULL;
-    if(NULL != module->fallback_bcast_module){
+    if (NULL != module->fallback_bcast_module)
+    {
         OBJ_RELEASE(module->fallback_bcast_module);
     }
     module->fallback_bcast_module = NULL;
-
 }
 OBJ_CLASS_INSTANCE(mca_coll_remap_module_t, mca_coll_base_module_t,
                    mca_coll_remap_module_construct,
                    mca_coll_remap_module_destruct);
 
-int mca_coll_remap_init_query(bool enable_progress_threads, 
-                                      bool enable_mpi_threads){
+int mca_coll_remap_init_query(bool enable_progress_threads,
+                              bool enable_mpi_threads)
+{
     return OMPI_SUCCESS;
 }
 
 mca_coll_base_module_t *
 mca_coll_remap_comm_query(struct ompi_communicator_t *comm,
-                                int *priority){
-    mca_coll_remap_module_t* remap_module;
+                          int *priority)
+{
+    mca_coll_remap_module_t *remap_module;
 
-    if(OMPI_COMM_IS_INTER(comm)){
+    if (OMPI_COMM_IS_INTER(comm))
+    {
         /* can only use intra comms */
         *priority = 0;
         return NULL;
     }
 
-    if(ompi_comm_size(comm)<2){
+    if (ompi_comm_size(comm) < 2)
+    {
         /* make sure there are at least 2 ranks in comm */
         *priority = 0;
         return NULL;
     }
 
     *priority = mca_coll_remap_component.priority;
-    if(mca_coll_remap_component.priority <= 0){
+    if (mca_coll_remap_component.priority <= 0)
+    {
         /* if priority <=0 comm is unavalable,
         most likely to happen when creating a cahced comm */
         return NULL;
@@ -110,24 +127,26 @@ mca_coll_remap_comm_query(struct ompi_communicator_t *comm,
     return &(remap_module->super);
 }
 
-
 int mca_coll_remap_module_enable(mca_coll_base_module_t *module,
-                                    struct ompi_communicator_t *comm){
-    mca_coll_remap_module_t *m = (mca_coll_remap_module_t*) module;
+                                 struct ompi_communicator_t *comm)
+{
+    mca_coll_remap_module_t *m = (mca_coll_remap_module_t *)module;
     mca_coll_base_comm_t *data = NULL, *remapped_data = NULL;
 
     /* setup fallback allreduce fn & module */
-    if(NULL == comm->c_coll->coll_allreduce_module){
-        opal_output_verbose(1, ompi_coll_base_framework.framework_output, 
-            "(%d, %s) No underlying allreduce api, disqualifying myself",
-            comm->c_contextid, comm->c_name );
+    if (NULL == comm->c_coll->coll_allreduce_module)
+    {
+        opal_output_verbose(1, ompi_coll_base_framework.framework_output,
+                            "(%d, %s) No underlying allreduce api, disqualifying myself",
+                            comm->c_contextid, comm->c_name);
         return OMPI_ERROR;
     }
 
-    if(NULL == comm->c_coll->coll_bcast_module){
-        opal_output_verbose(1, ompi_coll_base_framework.framework_output, 
-            "(%d, %s) No underlying bcast api, disqualifying myself",
-            comm->c_contextid, comm->c_name );
+    if (NULL == comm->c_coll->coll_bcast_module)
+    {
+        opal_output_verbose(1, ompi_coll_base_framework.framework_output,
+                            "(%d, %s) No underlying bcast api, disqualifying myself",
+                            comm->c_contextid, comm->c_name);
         return OMPI_ERROR;
     }
 
@@ -142,22 +161,35 @@ int mca_coll_remap_module_enable(mca_coll_base_module_t *module,
     /* allocate pointers for cached comms 
             might wan to revamp and make easer to extend to more colls
     */
-    m->cached_allreduce_comm = (ompi_communicator_t**) calloc(REMAP_ALLREDUCE_ALG_COUNT, sizeof(ompi_communicator_t*));
-    if(NULL == m->cached_allreduce_comm){
-        opal_output_verbose(1, ompi_coll_base_framework.framework_output, 
-            "Couldn't calloc cached_allredcue_comm pointers, exiting");
+    m->cached_allreduce_comm = (ompi_communicator_t **)calloc(REMAP_ALLREDUCE_ALG_COUNT, sizeof(ompi_communicator_t *));
+    if (NULL == m->cached_allreduce_comm)
+    {
+        opal_output_verbose(1, ompi_coll_base_framework.framework_output,
+                            "Couldn't calloc cached_allredcue_comm pointers, exiting");
         return OMPI_ERROR;
     }
 
-    m->cached_bcast_comm = (ompi_communicator_t**) calloc(REMAP_BCAST_ALG_COUNT, sizeof(ompi_communicator_t*));
-    if(NULL == m->cached_bcast_comm){
-        opal_output_verbose(1, ompi_coll_base_framework.framework_output, 
-            "Couldn't calloc cached_bcast_comm pointers, exiting");
+    m->cached_bcast_comm = (ompi_communicator_t **)calloc(REMAP_BCAST_ALG_COUNT, sizeof(ompi_communicator_t *));
+    if (NULL == m->cached_bcast_comm)
+    {
+        opal_output_verbose(1, ompi_coll_base_framework.framework_output,
+                            "Couldn't calloc cached_bcast_comm pointers, exiting");
         return OMPI_ERROR;
     }
+
+    m->scotch_bcast_new_root = (int*) malloc(REMAP_BCAST_ALG_COUNT * sizeof(int));
+    if (NULL == m->scotch_bcast_new_root)
+    {
+        opal_output_verbose(1, ompi_coll_base_framework.framework_output,
+                            "Couldn't malloc scoath_bcast_new_root , exiting");
+        return OMPI_ERROR;
+    }
+    for (int i = 0; i < REMAP_BCAST_ALG_COUNT; i++)
+        m->scotch_bcast_new_root[i] = -1;
 
     data = OBJ_NEW(mca_coll_base_comm_t);
-    if(NULL == data){
+    if (NULL == data)
+    {
         opal_output_verbose(1, ompi_coll_base_framework.framework_output,
                             "coll_remap ran out of memory allocating mca_coll_base_comm_t");
         return OMPI_ERROR;
@@ -181,10 +213,10 @@ int mca_coll_remap_module_enable(mca_coll_base_module_t *module,
 
     m->super.base_data = data;
 
-
     remapped_data = OBJ_NEW(mca_coll_base_comm_t);
 
-    if(NULL == remapped_data){
+    if (NULL == remapped_data)
+    {
         opal_output_verbose(1, ompi_coll_base_framework.framework_output,
                             "coll_remap ran out of memory allocating mca_coll_base_comm_t");
         return OMPI_ERROR;

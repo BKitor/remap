@@ -13,9 +13,10 @@ fi
 
 cd remap_tests
 
-# export OMPI_MCA_coll_base_verbose=10
+# export OMPI_MCA_coll_base_verbose=9
 # export OMPI_MCA_coll_remap_net_topo_input_mat="/home/bkitor/cedar_net_remap_mat.txt"
 export OMPI_MCA_coll_remap_cc_cluster=0
+export OMPI_MCA_coll_remap_turn_off_remap=0
 
 mpicc bcast_val.c -o bcast_val.out
 if [ $? -ne 0 ]; then
@@ -23,22 +24,31 @@ if [ $? -ne 0 ]; then
 fi
 
 # LD_PRELOAD="/cvmfs/soft.computecanada.ca/gentoo/2020/usr/lib64/libibverbs.so.1" mpirun -n 4 single_ar.out
-export OMPI_MCA_coll_remap_select_bcast_alg=5;
-mpirun -n 4 bcast_val.out
-echo "bintree exited $?"
 
-export OMPI_MCA_coll_remap_select_bcast_alg=7;
-mpirun -n 4 bcast_val.out
-echo "knomial exited $?"
+# for i in 0 1; do
+for i in 0 1; do
+    for NUM_PROC in 4 8 16; do
+    export OMPI_MCA_coll_remap_use_scotch=$i
 
-export OMPI_MCA_coll_remap_select_bcast_alg=8;
-mpirun -n 4 bcast_val.out
-echo "scag exited $?"
+    export OMPI_MCA_coll_remap_select_bcast_alg=5;
+    mpirun -n $NUM_PROC bcast_val.out
+    echo "bintree exited $? with $NUM_PROC proc and scotch $i"
+
+    export OMPI_MCA_coll_remap_select_bcast_alg=7;
+    mpirun -n $NUM_PROC bcast_val.out
+    echo "knomial exited $? with $NUM_PROC proc and scotch $i"
+
+    export OMPI_MCA_coll_remap_select_bcast_alg=8;
+    mpirun -n $NUM_PROC bcast_val.out
+    echo "scag exited $? with $NUM_PROC proc and scotch $i"
+    done
+done
+
+
 # export OMPI_MCA_coll_remap_select_bcast_alg=7;
 # mpirun -n 4 single_bc.out
 #  
 # export OMPI_MCA_coll_remap_select_bcast_alg=8;
 # mpirun -n 4 single_bc.out
 
-# export OMPI_MCA_coll_remap_turn_off_remap=1
 # mpirun -n 4 single_bc.out

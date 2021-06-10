@@ -6,6 +6,7 @@
 #include "ompi/communicator/communicator.h"
 #include "ompi/datatype/ompi_datatype.h"
 #include "ompi/mca/coll/base/coll_tags.h"
+#include "ompi/mca/coll/remap/coll_remap_scotch.h"
 
 int _find_closest_core(int ref_core, int comm_size, int *mapping, int *topo_info);
 
@@ -13,6 +14,7 @@ int mca_coll_remap_bcast_intra(void *buf, int count, struct ompi_datatype_t *dty
                                struct ompi_communicator_t *comm, mca_coll_base_module_t *module)
 {
     int alg, ret, rank, new_root = root;
+    int new_0_rank = -1;
     int remap_is_off = mca_coll_remap_component.turn_off_remap;
     mca_coll_remap_module_t *remap_module = (mca_coll_remap_module_t *)module;
     struct ompi_communicator_t *bcast_comm = NULL;
@@ -41,62 +43,73 @@ int mca_coll_remap_bcast_intra(void *buf, int count, struct ompi_datatype_t *dty
     if (NULL == bcast_comm && !remap_is_off)
     {
         /* cached module doesn't exist, make it exist */
-        switch (alg)
+        if (mca_coll_remap_component.use_scotch)
         {
-        case REMAP_BCAST_ALG_PIPELINE:
-            ret = remap_bcast_pipeline_remap(comm, remap_module, &bcast_comm);
+            ret = remap_bcast_scotch_remap(comm, remap_module, &bcast_comm, alg, &new_0_rank);
             if (OMPI_SUCCESS != ret)
             {
-                OPAL_OUTPUT((ompi_coll_remap_stream, "coll:remap:bcast pipeline remaping failed, ABORTING"));
+                OPAL_OUTPUT((ompi_coll_remap_stream, "coll:remap:bcast scotch remapping failed, ABORTING"));
                 goto bcast_abort;
             }
             remap_module->cached_bcast_comm[alg] = bcast_comm;
-            break;
-        case REMAP_BCAST_ALG_BIN_TREE:
-            ret = remap_bcast_bintree_remap(comm, remap_module, &bcast_comm);
-            if (OMPI_SUCCESS != ret)
-            {
-                OPAL_OUTPUT((ompi_coll_remap_stream, "coll:remap:bcast pipeline remaping failed, ABORTING"));
-                goto bcast_abort;
-            }
-            remap_module->cached_bcast_comm[alg] = bcast_comm;
-            break;
-        case REMAP_BCAST_ALG_BINOMIAL:
-            ret = remap_bcast_binomial_remap(comm, remap_module, &bcast_comm);
-            if (OMPI_SUCCESS != ret)
-            {
-                OPAL_OUTPUT((ompi_coll_remap_stream, "coll:remap:bcast binomial remaping failed, ABORTING"));
-                goto bcast_abort;
-            }
-            remap_module->cached_bcast_comm[alg] = bcast_comm;
-            break;
-        case REMAP_BCAST_ALG_KNOMIAL:
-            OPAL_OUTPUT((ompi_coll_remap_stream, "coll:remap:bcast performing knomial mapping"));
-            ret = remap_bcast_knomial_remap(comm, remap_module, &bcast_comm, 4);
-            if (OMPI_SUCCESS != ret)
-            {
-                OPAL_OUTPUT((ompi_coll_remap_stream, "coll:remap:bcast knomial remapping failed, ABORTIGN"));
-                goto bcast_abort;
-            }
-            remap_module->cached_bcast_comm[alg] = bcast_comm;
-            break;
-        case REMAP_BCAST_ALG_SCATTER_ALLGATHER:
-            OPAL_OUTPUT((ompi_coll_remap_stream, "coll:remap:bcast performing scatter_allgather mapping"));
-            ret = remap_bcast_scatter_allgather_remap(comm, remap_module, &bcast_comm);
-            if (OMPI_SUCCESS != ret)
-            {
-                OPAL_OUTPUT((ompi_coll_remap_stream, "coll:remap:bcast scatter_allgather remapping failed, ABORTIGN"));
-                goto bcast_abort;
-            }
-            remap_module->cached_bcast_comm[alg] = bcast_comm;
-            break;
-        default:
-            OPAL_OUTPUT((ompi_coll_remap_stream, "coll:remap:bcast there is no mapping for the selected alg, ABORTING"));
-            goto bcast_abort;
-            break;
+            remap_module->scotch_bcast_new_root[alg] = new_0_rank;
         }
+        else
+            switch (alg)
+            {
+            case REMAP_BCAST_ALG_PIPELINE:
+                ret = remap_bcast_pipeline_remap(comm, remap_module, &bcast_comm);
+                if (OMPI_SUCCESS != ret)
+                {
+                    OPAL_OUTPUT((ompi_coll_remap_stream, "coll:remap:bcast pipeline remaping failed, ABORTING"));
+                    goto bcast_abort;
+                }
+                remap_module->cached_bcast_comm[alg] = bcast_comm;
+                break;
+            case REMAP_BCAST_ALG_BIN_TREE:
+                ret = remap_bcast_bintree_remap(comm, remap_module, &bcast_comm);
+                if (OMPI_SUCCESS != ret)
+                {
+                    OPAL_OUTPUT((ompi_coll_remap_stream, "coll:remap:bcast pipeline remaping failed, ABORTING"));
+                    goto bcast_abort;
+                }
+                remap_module->cached_bcast_comm[alg] = bcast_comm;
+                break;
+            case REMAP_BCAST_ALG_BINOMIAL:
+                ret = remap_bcast_binomial_remap(comm, remap_module, &bcast_comm);
+                if (OMPI_SUCCESS != ret)
+                {
+                    OPAL_OUTPUT((ompi_coll_remap_stream, "coll:remap:bcast binomial remaping failed, ABORTING"));
+                    goto bcast_abort;
+                }
+                remap_module->cached_bcast_comm[alg] = bcast_comm;
+                break;
+            case REMAP_BCAST_ALG_KNOMIAL:
+                OPAL_OUTPUT((ompi_coll_remap_stream, "coll:remap:bcast performing knomial mapping"));
+                ret = remap_bcast_knomial_remap(comm, remap_module, &bcast_comm, 4);
+                if (OMPI_SUCCESS != ret)
+                {
+                    OPAL_OUTPUT((ompi_coll_remap_stream, "coll:remap:bcast knomial remapping failed, ABORTIGN"));
+                    goto bcast_abort;
+                }
+                remap_module->cached_bcast_comm[alg] = bcast_comm;
+                break;
+            case REMAP_BCAST_ALG_SCATTER_ALLGATHER:
+                OPAL_OUTPUT((ompi_coll_remap_stream, "coll:remap:bcast performing scatter_allgather mapping"));
+                ret = remap_bcast_scatter_allgather_remap(comm, remap_module, &bcast_comm);
+                if (OMPI_SUCCESS != ret)
+                {
+                    OPAL_OUTPUT((ompi_coll_remap_stream, "coll:remap:bcast scatter_allgather remapping failed, ABORTIGN"));
+                    goto bcast_abort;
+                }
+                remap_module->cached_bcast_comm[alg] = bcast_comm;
+                break;
+            default:
+                OPAL_OUTPUT((ompi_coll_remap_stream, "coll:remap:bcast there is no mapping for the selected alg, ABORTING"));
+                goto bcast_abort;
+                break;
+            }
     }
-    OPAL_OUTPUT((ompi_coll_remap_stream, "coll:remap:bcast rank:%d root:%d remap_is_off:%d", rank, root, remap_is_off));
 
     // remaping is performed assuming root is 0, so make sure root has the data
     if (root != 0 && !remap_is_off)
@@ -115,6 +128,16 @@ int mca_coll_remap_bcast_intra(void *buf, int count, struct ompi_datatype_t *dty
                               comm, MPI_STATUS_IGNORE));
         }
     }
+    if (!remap_is_off && mca_coll_remap_component.use_scotch)
+    {
+        if (remap_module->scotch_bcast_new_root[alg] == -1)
+        {
+            OPAL_OUTPUT((ompi_coll_remap_stream, "coll:remap:bcast ERROR: remap_module->scotch_bcast_new_root[alg] is -1 for alg :%d", alg));
+            goto bcast_abort;
+        }
+        else
+            new_root = remap_module->scotch_bcast_new_root[alg];
+    }
 
     // if remapping is performed, need to swap out the base_data
     if (!remap_is_off)
@@ -122,6 +145,8 @@ int mca_coll_remap_bcast_intra(void *buf, int count, struct ompi_datatype_t *dty
         base_data_swp = remap_module->super.base_data;
         remap_module->super.base_data = remap_module->cached_base_data;
     }
+
+    OPAL_OUTPUT((ompi_coll_remap_stream, "coll:remap:bcast rank:%d root:%d new_root:%d remap_is_off:%d", rank, root, new_root, remap_is_off));
 
     switch (alg)
     {
@@ -499,16 +524,83 @@ int _rec_bintree_mapping_2(int rr, int rc, int comm_size, int *topo_info, int *m
     d = pown(2, l);
     c1 = rr + d;
     c2 = rr + 2 * d;
-    if (c2 < comm_size){
+    if (c2 < comm_size)
+    {
         tmp_core = _find_closest_core(rc, comm_size, mapping, topo_info);
         mapping[tmp_core] = c2;
         _rec_bintree_mapping_2(c2, tmp_core, comm_size, topo_info, mapping);
     }
-    if (c1 < comm_size){
+    if (c1 < comm_size)
+    {
         tmp_core = _find_closest_core(rc, comm_size, mapping, topo_info);
         mapping[tmp_core] = c1;
         _rec_bintree_mapping_2(c1, tmp_core, comm_size, topo_info, mapping);
     }
+}
+
+// 1. create SCOTCH_graph based on alg
+// 2. convert `module->proc_locality_arr` to SCOTCH_arch
+// 3. SCOTCH_graphMap
+// 4. new_comm
+int remap_bcast_scotch_remap(struct ompi_communicator_t *old_comm,
+                             mca_coll_remap_module_t *module,
+                             struct ompi_communicator_t **new_comm, int alg, int *new_root)
+{
+    mca_coll_remap_scotch_graph_data g_data;
+    SCOTCH_Arch *a = SCOTCH_archAlloc();
+    SCOTCH_archInit(a);
+    SCOTCH_Graph *g = SCOTCH_graphAlloc();
+    SCOTCH_graphInit(g);
+    SCOTCH_Strat *s = SCOTCH_stratAlloc();
+    SCOTCH_stratInit(s);
+
+    int world_size = ompi_comm_size(old_comm), rank = ompi_comm_rank(old_comm), ret = OMPI_ERROR;
+    SCOTCH_Num *mapping = malloc(sizeof(SCOTCH_Num) * world_size);
+
+    // step 1: generate communication graph
+    switch (alg)
+    {
+    case REMAP_BCAST_ALG_BIN_TREE:
+        mca_coll_remap_scotch_build_bintree_comm_graph(g, world_size, &g_data);
+        break;
+    case REMAP_BCAST_ALG_KNOMIAL:
+        mca_coll_remap_scotch_build_knomial_comm_graph(g, world_size, &g_data, 4);
+        break;
+    case REMAP_BCAST_ALG_SCATTER_ALLGATHER:
+        mca_coll_remap_scotch_build_scag_comm_graph(g, world_size, &g_data);
+        break;
+    default:
+        OPAL_OUTPUT((ompi_coll_remap_stream, "coll:remap:bcast_scotch_remap ERROR: no mapping for alg %d ABORTING", alg));
+        goto remap_bcast_scotch_abort;
+    }
+
+    // step 2: topology architecture
+    mca_coll_remap_scotch_build_topo_arch(a, module->proc_locality_arr, world_size);
+
+    // step 3: perform remapping
+    SCOTCH_graphMap(g, a, s, mapping);
+
+    if (OMPI_SUCCESS != mca_coll_remap_create_new_cached_comm(old_comm, mapping, new_comm))
+    {
+        OPAL_OUTPUT((ompi_coll_remap_stream, "coll:remap:bcast_scotch_remap ERROR: creating new communicator failed ABORTING"));
+        goto remap_bcast_scotch_abort;
+    }
+
+    *new_root = mapping[0];
+    OPAL_OUTPUT((ompi_coll_remap_stream,
+                 "coll:remap:bcast SCOTCH rank %d bound to core %d (from mapping %ld, alg %d, new_root:%d)",
+                 ompi_comm_rank(*new_comm), rank, mapping[rank], alg, *new_root));
+    ret = OMPI_SUCCESS;
+
+remap_bcast_scotch_abort:
+    free(mapping);
+    SCOTCH_archExit(a);
+    SCOTCH_graphExit(g);
+    SCOTCH_stratExit(s);
+    SCOTCH_memFree(a);
+    SCOTCH_memFree(g);
+    SCOTCH_memFree(s);
+    return ret;
 }
 
 int remap_bcast_pick_alg(int count, struct ompi_datatype_t *datatype,

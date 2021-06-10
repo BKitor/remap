@@ -1,8 +1,8 @@
 #include "opal_config.h"
 #include "coll_remap.h"
 
-const char *mca_coll_remap_component_version_string = 
-        "Open MPI remap collective MCA component version " OMPI_VERSION;
+const char *mca_coll_remap_component_version_string =
+    "Open MPI remap collective MCA component version " OMPI_VERSION;
 
 int ompi_coll_remap_stream = -1;
 
@@ -26,10 +26,8 @@ mca_coll_remap_component_t mca_coll_remap_component = {
             .mca_open_component = remap_open,
             .mca_register_component_params = remap_register,
         },
-        .collm_data = {
-            /* The component is not checkpoint ready */
-            MCA_BASE_METADATA_PARAM_NONE
-        },
+        .collm_data = {/* The component is not checkpoint ready */
+                       MCA_BASE_METADATA_PARAM_NONE},
 
         /* Initialization / querying functions */
 
@@ -42,64 +40,74 @@ mca_coll_remap_component_t mca_coll_remap_component = {
     .turn_off_remap = 0,
     .cc_cluster = 0,
     .net_topo_input_mat = NULL,
+    .use_scotch = 0,
 };
 
-static int remap_open(void){
-    #if OPAL_ENABLE_DEBUG
+static int remap_open(void)
+{
+#if OPAL_ENABLE_DEBUG
     {
         int param;
 
         // creates a stream object for debug output
         param = mca_base_var_find("ompi", "coll", "base", "verbose");
-        if(param >= 0){
+        if (param >= 0)
+        {
             const int *verbose = NULL;
             mca_base_var_get_value(param, &verbose, NULL, NULL);
-            if(verbose && verbose[0] > 0){
+            if (verbose && verbose[0] > 0)
+            {
                 ompi_coll_remap_stream = opal_output_open(NULL);
             }
         }
-        
     }
-    #endif /* OPAL_ENABLE_DEBUG */
+#endif /* OPAL_ENABLE_DEBUG */
     OPAL_OUTPUT((ompi_coll_remap_stream, "coll:remap:remap_open: done!"));
     return OMPI_SUCCESS;
 }
 
-static int remap_register(void){
-    (void) mca_base_component_var_register(&mca_coll_remap_component.super.collm_version,
-                                            "priority", "Priority of the remap component",
-                                            MCA_BASE_VAR_TYPE_INT, NULL, 0, 0, OPAL_INFO_LVL_6, 
-                                            MCA_BASE_VAR_SCOPE_READONLY,
-                                            &(mca_coll_remap_component.priority));
-    
-    (void) mca_base_component_var_register(&mca_coll_remap_component.super.collm_version,
-                                            "select_allreduce_alg", "select which allreduce alg to use, same choices as tuned",
-                                            MCA_BASE_VAR_TYPE_INT, NULL, 0, 0, OPAL_INFO_LVL_6, 
-                                            MCA_BASE_VAR_SCOPE_READONLY,
-                                            &(mca_coll_remap_component.select_allreduce_alg));
+static int remap_register(void)
+{
+    (void)mca_base_component_var_register(&mca_coll_remap_component.super.collm_version,
+                                          "priority", "Priority of the remap component",
+                                          MCA_BASE_VAR_TYPE_INT, NULL, 0, 0, OPAL_INFO_LVL_6,
+                                          MCA_BASE_VAR_SCOPE_READONLY,
+                                          &(mca_coll_remap_component.priority));
 
-    (void) mca_base_component_var_register(&mca_coll_remap_component.super.collm_version,
-                                            "select_bcast_alg", "select which bcast alg to use, same choices as tuned",
-                                            MCA_BASE_VAR_TYPE_INT, NULL, 0, 0, OPAL_INFO_LVL_6, 
-                                            MCA_BASE_VAR_SCOPE_READONLY,
-                                            &(mca_coll_remap_component.select_bcast_alg));
+    (void)mca_base_component_var_register(&mca_coll_remap_component.super.collm_version,
+                                          "select_allreduce_alg", "select which allreduce alg to use, same choices as tuned",
+                                          MCA_BASE_VAR_TYPE_INT, NULL, 0, 0, OPAL_INFO_LVL_6,
+                                          MCA_BASE_VAR_SCOPE_READONLY,
+                                          &(mca_coll_remap_component.select_allreduce_alg));
 
-    (void) mca_base_component_var_register(&mca_coll_remap_component.super.collm_version,
-                                            "turn_off_remap", "for performace testing, passes unremaped comm instead of remapped comm",
-                                            MCA_BASE_VAR_TYPE_INT, NULL, 0, 0, OPAL_INFO_LVL_6, 
-                                            MCA_BASE_VAR_SCOPE_READONLY,
-                                            &(mca_coll_remap_component.turn_off_remap));
+    (void)mca_base_component_var_register(&mca_coll_remap_component.super.collm_version,
+                                          "select_bcast_alg", "select which bcast alg to use, same choices as tuned",
+                                          MCA_BASE_VAR_TYPE_INT, NULL, 0, 0, OPAL_INFO_LVL_6,
+                                          MCA_BASE_VAR_SCOPE_READONLY,
+                                          &(mca_coll_remap_component.select_bcast_alg));
 
-    (void) mca_base_component_var_register(&mca_coll_remap_component.super.collm_version,
-                                            "cc_cluster", "compute canada cluster {null, 1:niagara, 2:mist, 3:cedar, 4:mist, 5:beluga}",
-                                            MCA_BASE_VAR_TYPE_INT, NULL, 0, 0, OPAL_INFO_LVL_6, 
-                                            MCA_BASE_VAR_SCOPE_READONLY,
-                                            &(mca_coll_remap_component.cc_cluster));
+    (void)mca_base_component_var_register(&mca_coll_remap_component.super.collm_version,
+                                          "turn_off_remap", "for performace testing, passes unremaped comm instead of remapped comm",
+                                          MCA_BASE_VAR_TYPE_INT, NULL, 0, 0, OPAL_INFO_LVL_6,
+                                          MCA_BASE_VAR_SCOPE_READONLY,
+                                          &(mca_coll_remap_component.turn_off_remap));
 
-    (void) mca_base_component_var_register(&mca_coll_remap_component.super.collm_version,
-                                            "net_topo_input_mat", "absolute localtino of matrix file with network topology",
-                                            MCA_BASE_VAR_TYPE_STRING, NULL, 0, 0, OPAL_INFO_LVL_6,
-                                            MCA_BASE_VAR_SCOPE_READONLY,
-                                            &(mca_coll_remap_component.net_topo_input_mat));
+    (void)mca_base_component_var_register(&mca_coll_remap_component.super.collm_version,
+                                          "cc_cluster", "compute canada cluster {null, 1:niagara, 2:mist, 3:cedar, 4:mist, 5:beluga}",
+                                          MCA_BASE_VAR_TYPE_INT, NULL, 0, 0, OPAL_INFO_LVL_6,
+                                          MCA_BASE_VAR_SCOPE_READONLY,
+                                          &(mca_coll_remap_component.cc_cluster));
+
+    (void)mca_base_component_var_register(&mca_coll_remap_component.super.collm_version,
+                                          "net_topo_input_mat", "absolute localtino of matrix file with network topology",
+                                          MCA_BASE_VAR_TYPE_STRING, NULL, 0, 0, OPAL_INFO_LVL_6,
+                                          MCA_BASE_VAR_SCOPE_READONLY,
+                                          &(mca_coll_remap_component.net_topo_input_mat));
+
+    (void)mca_base_component_var_register(&mca_coll_remap_component.super.collm_version,
+                                          "use_scotch", "use scotch to perform the mapping over heuristics",
+                                          MCA_BASE_VAR_TYPE_INT, NULL, 0, 0, OPAL_INFO_LVL_6,
+                                          MCA_BASE_VAR_SCOPE_READONLY,
+                                          &(mca_coll_remap_component.use_scotch));
     return OMPI_SUCCESS;
 }

@@ -41,6 +41,8 @@ typedef struct mca_coll_remap_module_t{
 
     struct mca_coll_base_comm_t *cached_base_data;
 
+    int *scotch_bcast_new_root; // array to save reordering of rank 0 when using scotch bcast 
+
     // fallback allreduce alg
     mca_coll_base_module_allreduce_fn_t fallback_allreduce_fn;
     mca_coll_base_module_t *fallback_allreduce_module;
@@ -59,6 +61,7 @@ typedef struct mca_coll_remap_component_t{
     int turn_off_remap;
     int cc_cluster;
     char* net_topo_input_mat;
+    int use_scotch;
 } mca_coll_remap_component_t;
 
 OMPI_MODULE_DECLSPEC extern mca_coll_remap_component_t mca_coll_remap_component;
@@ -100,6 +103,10 @@ int remap_allreduce_raben_remap(struct ompi_communicator_t *old_comm,
 int remap_allreduce_linear_remap(struct ompi_communicator_t *old_comm,
                                   mca_coll_remap_module_t *module,
                                   struct ompi_communicator_t **new_comm);
+
+int remap_allreduce_scotch_remap(struct ompi_communicator_t *old_comm,
+                              mca_coll_remap_module_t *module,
+                              struct ompi_communicator_t **new_comm, int alg);
 
 // stuff for remap_bcast
 enum MCA_COLL_REMAP_BCAST_ALG{
@@ -148,6 +155,10 @@ int remap_bcast_scatter_allgather_remap(struct ompi_communicator_t *old_comm,
 int remap_bcast_bintree_remap(struct ompi_communicator_t *old_comm,
                               mca_coll_remap_module_t *module,
                               struct ompi_communicator_t **new_comm);
+
+int remap_bcast_scotch_remap(struct ompi_communicator_t *old_comm,
+                              mca_coll_remap_module_t *module,
+                              struct ompi_communicator_t **new_comm, int alg, int *new_root);
 
 END_C_DECLS
 

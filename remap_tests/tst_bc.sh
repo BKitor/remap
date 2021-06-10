@@ -17,19 +17,21 @@ OMB_BC=$OMB_COLL/osu_bcast
 export OMPI_MCA_coll=^hcoll
 export OMPI_MCA_btl=^openib
 
-# export OMPI_MCA_coll_base_verbose=9
+export OMPI_MCA_coll_base_verbose=9
 # export OMPI_MCA_coll_remap_net_topo_input_mat="/home/bkitor/cedar_net_remap_mat.txt"
 export OMPI_MCA_coll_remap_turn_off_remap=0
 export OMPI_MCA_coll_remap_cc_cluster=0
 
-export OMPI_MCA_coll_remap_select_bcast_alg=5
-# LD_PRELOAD="/cvmfs/soft.computecanada.ca/gentoo/2020/usr/lib64/libibverbs.so.1" \
-mpirun -n 4 $OMB_BC
+for enable_scotch in 0 1; do
+    export OMPI_MCA_coll_use_scotch=$enable_scotch
+    for NUM_PROC in 4 8 16; do
+        export OMPI_MCA_coll_remap_select_bcast_alg=5
+        mpirun -n $NUM_PROC $OMB_BC
 
-export OMPI_MCA_coll_remap_select_bcast_alg=7
-# LD_PRELOAD="/cvmfs/soft.computecanada.ca/gentoo/2020/usr/lib64/libibverbs.so.1" \
-mpirun -n 4 $OMB_BC
+        export OMPI_MCA_coll_remap_select_bcast_alg=7
+        mpirun -n $NUM_PROC $OMB_BC
 
-export OMPI_MCA_coll_remap_select_bcast_alg=8
-# LD_PRELOAD="/cvmfs/soft.computecanada.ca/gentoo/2020/usr/lib64/libibverbs.so.1" \
-mpirun -n 4 $OMB_BC
+        export OMPI_MCA_coll_remap_select_bcast_alg=8
+        mpirun -n $NUM_PROC $OMB_BC
+    done
+done

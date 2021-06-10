@@ -17,19 +17,23 @@ int main(int argc, char *argv[])
 
     snd_bff = malloc(memsize * sizeof(int));
 
+    int g_sum = 0;
+    for(int i = 0; i<size; i++)
+        g_sum += i;
+
     for (int i = 0; i < size; i++)
     {
         int err = 0;
         for (int j = 0; j < memsize; j++)
         {
-            snd_bff[j] = rank;
+            snd_bff[j] = rank*i;
         }
 
-        MPI_Bcast(snd_bff, memsize, MPI_INT, i, MPI_COMM_WORLD);
+        MPI_Allreduce(MPI_IN_PLACE, snd_bff, memsize, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
 
         for (int j = 0; j < memsize; j++)
         {
-            if (snd_bff[j] != i)
+            if (snd_bff[j] != g_sum*i)
                 err += 1;
         }
 
@@ -38,16 +42,13 @@ int main(int argc, char *argv[])
             printf("ERROR: rank:%d snd_buff %d not equal round %d\n", rank, snd_bff[0], i);
             g_err = 69;
         }
-        // else
-        //     printf("SUCCESS: rank: %d, round: %d\n", rank, i);
+
         fflush(stdout);
         fflush(stderr);
         MPI_Barrier(MPI_COMM_WORLD);
     }
 
     free(snd_bff);
-
     MPI_Finalize();
-
     return g_err;
 }
