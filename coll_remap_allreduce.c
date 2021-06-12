@@ -130,8 +130,11 @@ int mca_coll_remap_allreduce_intra(const void *sbuf, void *rbuf, int count,
         ret = ompi_coll_base_allreduce_intra_recursivedoubling(sbuf, rbuf, count, dtype, op,
                                                                ar_comm, ar_comm->c_coll->coll_allreduce_module);
         break;
-    case REMAP_ALLREDUCE_ALG_RING:
     case REMAP_ALLREDUCE_ALG_SEGMENTED_RING:
+        ret = ompi_coll_base_allreduce_intra_ring_segmented(sbuf, rbuf, count, dtype, op, ar_comm,
+                                                  ar_comm->c_coll->coll_allreduce_module, 0);
+        break;
+    case REMAP_ALLREDUCE_ALG_RING:
         ret = ompi_coll_base_allreduce_intra_ring(sbuf, rbuf, count, dtype, op, ar_comm,
                                                   ar_comm->c_coll->coll_allreduce_module);
         break;
@@ -443,6 +446,7 @@ int remap_allreduce_scotch_remap(struct ompi_communicator_t *old_comm,
     switch (alg)
     {
     case REMAP_ALLREDUCE_ALG_RING:
+    case REMAP_ALLREDUCE_ALG_SEGMENTED_RING:
         mca_coll_remap_scotch_build_ring_comm_graph(g, world_size, &g_data);
         break;
     case REMAP_ALLREDUCE_ALG_RECURSIVE_DOUBLING:
