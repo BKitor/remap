@@ -204,14 +204,12 @@ int mca_coll_remap_scotch_build_bintree_comm_graph(SCOTCH_Graph *g, int comm_siz
     g_d->vendtab = malloc(vertnbr * sizeof(SCOTCH_Num));
     g_d->vlbltab = malloc(vertnbr * sizeof(SCOTCH_Num));
     SCOTCH_Num edgenbr = (SCOTCH_Num)(comm_size - 1) * 2;
-    g_d->edgetab = malloc(edgenbr * sizeof(SCOTCH_Num));
-    g_d->edlotab = malloc(edgenbr * sizeof(SCOTCH_Num));
+    g_d->edgetab = calloc(edgenbr, sizeof(SCOTCH_Num));
+    g_d->edlotab = calloc(edgenbr, sizeof(SCOTCH_Num));
 
     g_d->vlbltab[0] = 0;
     g_d->verttab[0] = 0;
     g_d->vendtab[0] = 2;
-    g_d->edgetab[0] = 1;
-    g_d->edgetab[1] = 2;
 
     for (int i = 1; i < vertnbr; i++)
     {
@@ -231,8 +229,6 @@ int mca_coll_remap_scotch_build_bintree_comm_graph(SCOTCH_Graph *g, int comm_siz
 
     g_d->edgetab[0] = 1;
     g_d->edgetab[1] = 2;
-    g_d->edgetab[2] = 0;
-    g_d->edgetab[5] = 0;
     for (int i = 1; i < vertnbr; i++)
     {
         int lvl = _log_2(i + 1);
@@ -429,7 +425,7 @@ int mca_coll_remap_scotch_build_scag_comm_graph(SCOTCH_Graph *g, int comm_size, 
         OPAL_OUTPUT((ompi_coll_remap_stream, "scotch_build_scag_comm_graph: ERROR, SCOTCH_graphCheck Failed, aborting"));
         return OMPI_ERROR;
     }
-   OPAL_OUTPUT((ompi_coll_remap_stream, "scotch_build_scag_comm_graph: scag graph built"));
+    OPAL_OUTPUT((ompi_coll_remap_stream, "scotch_build_scag_comm_graph: scag graph built"));
 
     return OMPI_SUCCESS;
 }

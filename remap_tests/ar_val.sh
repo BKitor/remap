@@ -24,22 +24,21 @@ if [ $? -ne 0 ]; then
 fi
 
 
-for i in 1; do
-# for i in 0 1; do
+for i in 1 0; do
     for NUM_PROC in 4 8 16; do
     export OMPI_MCA_coll_remap_use_scotch=$i
 
     export OMPI_MCA_coll_remap_select_allreduce_alg=3;
     mpirun -n $NUM_PROC ar_val.out
-    echo "SCOTCH rdouble exited $? with $NUM_PROC proc and scotch $i" | tee > /dev/stderr 
+    echo "rdouble exited $? with $NUM_PROC proc and scotch $i" | tee > /dev/stderr 
 
     export OMPI_MCA_coll_remap_select_allreduce_alg=4;
     mpirun -n $NUM_PROC ar_val.out
-    echo "SCOTCH ring exited $? with $NUM_PROC proc and scotch $i" | tee > /dev/stderr 
+    echo "ring exited $? with $NUM_PROC proc and scotch $i" | tee > /dev/stderr 
 
     export OMPI_MCA_coll_remap_select_allreduce_alg=6;
     mpirun -n $NUM_PROC ar_val.out
-    echo "SCOTCH rsa exited $? with $NUM_PROC proc and scotch $i" | tee > /dev/stderr
+    echo "rsa exited $? with $NUM_PROC proc and scotch $i" | tee > /dev/stderr
     done
 done
 

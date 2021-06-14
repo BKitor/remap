@@ -1,6 +1,7 @@
 #include "coll_remap.h"
 
 #include "opal/util/output.h"
+#include "opal/util/bit_ops.h"
 
 #include "ompi/mca/coll/base/coll_base_functions.h"
 #include "ompi/communicator/communicator.h"
@@ -41,6 +42,20 @@ int mca_coll_remap_allreduce_intra(const void *sbuf, void *rbuf, int count,
                      alg, (REMAP_ALLREDUCE_ALG_COUNT - 1)));
         goto ar_abort;
     }
+    if (alg == REMAP_ALLREDUCE_ALG_LINEAR)
+    {
+        OPAL_OUTPUT((ompi_coll_remap_stream, "coll:remap:allreduce WARNING allreduce_linear seg faults on Beluga, switching to ring"));
+        alg = REMAP_ALLREDUCE_ALG_RING;
+    }
+    int rsa_nsteps = opal_hibit(ompi_comm_size(comm), comm->c_cube_dim + 1);   /* ilog2(comm_size) */
+    assert(rsa_nsteps >= 0);
+    int rsa_nprocs_pof2 = 1 << rsa_nsteps;                              /* flp2(comm_size) */
+    if (alg == REMAP_ALLREDUCE_ALG_RABENSEIFNER && (count < rsa_nprocs_pof2 || !ompi_op_is_commute(op)))
+    {
+        OPAL_OUTPUT((ompi_coll_remap_stream, "coll:remap:allreduce WARNING allreduce_rsa will revert to linear and seg fault on Beluga, switching to ring"));
+        alg = REMAP_ALLREDUCE_ALG_RING;
+
+    }
 
     // if remap is off, just stick with the communicator passed in
     ar_comm = (mca_coll_remap_component.turn_off_remap) ? comm : remap_module->cached_allreduce_comm[alg];
@@ -60,7 +75,8 @@ int mca_coll_remap_allreduce_intra(const void *sbuf, void *rbuf, int count,
         if (mca_coll_remap_component.use_scotch)
         {
             ret = remap_allreduce_scotch_remap(comm, remap_module, &ar_comm, alg);
-            if(OMPI_SUCCESS != ret){
+            if (OMPI_SUCCESS != ret)
+            {
                 OPAL_OUTPUT((ompi_coll_remap_stream, "coll:remap:allreduce scotch remap didn't work, ABORTING"));
                 goto ar_abort;
             }
@@ -132,7 +148,7 @@ int mca_coll_remap_allreduce_intra(const void *sbuf, void *rbuf, int count,
         break;
     case REMAP_ALLREDUCE_ALG_SEGMENTED_RING:
         ret = ompi_coll_base_allreduce_intra_ring_segmented(sbuf, rbuf, count, dtype, op, ar_comm,
-                                                  ar_comm->c_coll->coll_allreduce_module, 0);
+                                                            ar_comm->c_coll->coll_allreduce_module, 0);
         break;
     case REMAP_ALLREDUCE_ALG_RING:
         ret = ompi_coll_base_allreduce_intra_ring(sbuf, rbuf, count, dtype, op, ar_comm,
