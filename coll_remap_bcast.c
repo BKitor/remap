@@ -445,8 +445,8 @@ int remap_bcast_bintree_remap(struct ompi_communicator_t *old_comm,
         mapping[i] = -1;
     mapping[0] = 0;
 
-    _rec_bintree_mapping(0, 0, comm_size, topo_info, mapping);
-    // _rec_bintree_mapping_2(0, 0, comm_size, topo_info, mapping);
+    // _rec_bintree_mapping(0, 0, comm_size, topo_info, mapping);
+    _rec_bintree_mapping_2(0, 0, comm_size, topo_info, mapping);
 
     if (OMPI_SUCCESS != mca_coll_remap_create_new_cached_comm(old_comm, mapping, new_comm))
     {
