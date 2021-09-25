@@ -1,3 +1,4 @@
+initenv.bash
 initenv.source
 *.Plo
 Makefile

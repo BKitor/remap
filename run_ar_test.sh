@@ -12,6 +12,11 @@ run_val(){
     ./remap_tests/ar_val.sh
 }
 
+run_gpu(){
+   ./remap_tests/ar_gpu_val.sh 
+}
+
 if [[ "$1" == *"s"* ]];then run_single ; fi
 if [[ "$1" == *"o"* ]];then run_omb ; fi
 if [[ "$1" == *"v"* ]];then run_val ; fi
+if [[ "$1" == *"g"* ]];then run_gpu ; fi

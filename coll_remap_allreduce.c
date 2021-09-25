@@ -8,6 +8,7 @@
 #include "ompi/datatype/ompi_datatype.h"
 #include "ompi/op/op.h"
 #include "ompi/mca/coll/remap/coll_remap_scotch.h"
+#include "opal/datatype/opal_datatype_cuda.h"
 
 /*
 1. based on the comm, decide which algorithm to run, should be similar to tuned's decision
@@ -16,7 +17,6 @@
     2b. if it doesn't exist, create and cache the new comm
 3. call the alg with the cached comm
 
-    going to need a way to shuffle the mem, will fix when get there
     
 */
 int mca_coll_remap_allreduce_intra(const void *sbuf, void *rbuf, int count,
@@ -28,6 +28,17 @@ int mca_coll_remap_allreduce_intra(const void *sbuf, void *rbuf, int count,
     mca_coll_remap_module_t *remap_module = (mca_coll_remap_module_t *)module;
     ompi_communicator_t *ar_comm = NULL;
     int alg, ret;
+
+    int is_cuda_buffer = opal_cuda_check_bufs((char *)sbuf, (char *)rbuf);
+    int use_gpu_reduce = is_cuda_buffer && OMPI_OP_SUM == op->op_type 
+        && mca_coll_remap_component.use_gpu_reduce;
+
+    // OPAL_OUTPUT((ompi_coll_remap_stream, "coll:remap:allreduce use_cuda_reduce set to :%d", use_gpu_reduce));
+    // OPAL_OUTPUT((ompi_coll_remap_stream, "coll:remap:allreduce ", is_cuda_buffer, ));
+    if (use_gpu_reduce && remap_module->allreduce_cuda_config.cuda_buff[0] == NULL){
+        OPAL_OUTPUT((ompi_coll_remap_stream, "coll:remap:allreduce initializeing cuda buffer"));
+        intialize_cuda_helpers(&remap_module->allreduce_cuda_config);
+    }
 
     if (!ompi_op_is_commute(op))
     {
@@ -131,6 +142,9 @@ int mca_coll_remap_allreduce_intra(const void *sbuf, void *rbuf, int count,
                 break;
             }
     }
+    
+    if (use_gpu_reduce)
+            OPAL_OUTPUT((ompi_coll_remap_stream, "coll:remap:allreduce using CUDA REDUCE"));
 
     switch (alg)
     {
@@ -143,20 +157,40 @@ int mca_coll_remap_allreduce_intra(const void *sbuf, void *rbuf, int count,
                                                             ar_comm, ar_comm->c_coll->coll_allreduce_module);
         break;
     case REMAP_ALLREDUCE_ALG_RECURSIVE_DOUBLING:
-        ret = ompi_coll_base_allreduce_intra_recursivedoubling(sbuf, rbuf, count, dtype, op,
+        if(use_gpu_reduce)
+            ret = ompi_coll_remap_allreduce_cuda_opt_recursivedoubling(sbuf, rbuf, count, dtype, op,
+                                                               ar_comm, ar_comm->c_coll->coll_allreduce_module,
+                                                               &remap_module->allreduce_cuda_config);
+        else
+            ret = ompi_coll_base_allreduce_intra_recursivedoubling(sbuf, rbuf, count, dtype, op,
                                                                ar_comm, ar_comm->c_coll->coll_allreduce_module);
         break;
     case REMAP_ALLREDUCE_ALG_SEGMENTED_RING:
-        ret = ompi_coll_base_allreduce_intra_ring_segmented(sbuf, rbuf, count, dtype, op, ar_comm,
-                                                            ar_comm->c_coll->coll_allreduce_module, 0);
+        if(use_gpu_reduce)
+            ret = ompi_coll_remap_allreduce_cuda_opt_ring(sbuf, rbuf, count, dtype, op, ar_comm,
+                                                                ar_comm->c_coll->coll_allreduce_module,
+                                                               &remap_module->allreduce_cuda_config);
+        else
+            ret = ompi_coll_base_allreduce_intra_ring_segmented(sbuf, rbuf, count, dtype, op, ar_comm,
+                                                                ar_comm->c_coll->coll_allreduce_module, 0);
         break;
     case REMAP_ALLREDUCE_ALG_RING:
-        ret = ompi_coll_base_allreduce_intra_ring(sbuf, rbuf, count, dtype, op, ar_comm,
-                                                  ar_comm->c_coll->coll_allreduce_module);
+        if(use_gpu_reduce)
+            ret = ompi_coll_remap_allreduce_cuda_opt_ring(sbuf, rbuf, count, dtype, op, ar_comm,
+                                                                ar_comm->c_coll->coll_allreduce_module,
+                                                               &remap_module->allreduce_cuda_config);
+        else
+            ret = ompi_coll_base_allreduce_intra_ring(sbuf, rbuf, count, dtype, op, ar_comm,
+                                                      ar_comm->c_coll->coll_allreduce_module);
         break;
     case REMAP_ALLREDUCE_ALG_RABENSEIFNER:
-        ret = ompi_coll_base_allreduce_intra_redscat_allgather(sbuf, rbuf, count, dtype, op,
-                                                               ar_comm, ar_comm->c_coll->coll_allreduce_module);
+        if(use_gpu_reduce)
+            ret = ompi_coll_remap_allreduce_cuda_opt_redscat_allgather(sbuf, rbuf, count, dtype, op,
+                                                                   ar_comm, ar_comm->c_coll->coll_allreduce_module,
+                                                                   &remap_module->allreduce_cuda_config);
+        else
+            ret = ompi_coll_base_allreduce_intra_redscat_allgather(sbuf, rbuf, count, dtype, op,
+                                                                   ar_comm, ar_comm->c_coll->coll_allreduce_module);
         break;
     default:
         OPAL_OUTPUT((ompi_coll_remap_stream, "coll:remap:allreduce you seem to have reached a part of code that shouldn't be possible, what have you done? ABORTING"));

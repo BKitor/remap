@@ -5,6 +5,7 @@ sources = \
         coll_remap_allreduce.c \
         coll_remap_bcast.c \
         coll_remap_topo_info.c \
+        coll_remap_allreduce_cuda_opt.c \
         coll_remap_scotch.h \
         coll_remap_scotch.c 
 
@@ -22,7 +23,7 @@ endif
 mcacomponentdir = $(ompilibdir)
 mcacomponent_LTLIBRARIES = $(component_install)
 mca_coll_remap_la_SOURCES = $(sources)
-mca_coll_remap_la_LDFLAGS = -module -avoid-version -libverbs -L/home/bkitor/scotch-v6.1.0/lib/ -lscotch -lscotcherr
+mca_coll_remap_la_LDFLAGS = -module -avoid-version -libverbs -L/home/bkitor/scotch-v6.1.0/lib/ -lscotch -lscotcherr -lkernel -L$(top_builddir)/ompi/mca/coll/remap/kernel
 mca_coll_remap_la_CFLAGS = -I/home/bkitor/scotch-v6.1.0/include/
 mca_coll_remap_la_LIBADD = $(top_builddir)/ompi/lib@OMPI_LIBMPI_NAME@.la
 

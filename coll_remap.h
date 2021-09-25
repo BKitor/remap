@@ -1,7 +1,6 @@
 #ifndef MCA_COLL_REMAP_EXPORT_H
 #define MCA_COLL_REMAP_EXPORT_H
 
-
 #include "ompi_config.h"
 
 #include "mpi.h"
@@ -13,24 +12,30 @@ BEGIN_C_DECLS
 extern int ompi_coll_remap_stream;
 
 int mca_coll_remap_init_query(bool enable_progress_threads,
-                                bool enable_mpi_threads);
-mca_coll_base_module_t
-    *mca_coll_remap_comm_query(struct ompi_communicator_t *comm,
-                                int *priority);
+                              bool enable_mpi_threads);
+mca_coll_base_module_t*
+    mca_coll_remap_comm_query(struct ompi_communicator_t *comm,
+                              int *priority);
 
 int mca_coll_remap_module_enable(mca_coll_base_module_t *module,
-                                    struct ompi_communicator_t *comm);
+                                 struct ompi_communicator_t *comm);
 
 int mca_coll_remap_allreduce_intra(const void *sbuf, void *rbuf, int count,
-                                       struct ompi_datatype_t *dtype,
-                                       struct ompi_op_t *op,
-                                       struct ompi_communicator_t *comm,
-                                       mca_coll_base_module_t *module);
+                                   struct ompi_datatype_t *dtype,
+                                   struct ompi_op_t *op,
+                                   struct ompi_communicator_t *comm,
+                                   mca_coll_base_module_t *module);
 
 int mca_coll_remap_bcast_intra(void *buf, int count, struct ompi_datatype_t *dtype, int root,
                                struct ompi_communicator_t *comm, mca_coll_base_module_t *module);
 
-typedef struct mca_coll_remap_module_t{
+typedef struct coll_remap_allreduce_cuda_coll_config_t
+{
+    void *cuda_buff[2];
+} coll_remap_allreduce_cuda_coll_config_t;
+
+typedef struct mca_coll_remap_module_t
+{
     mca_coll_base_module_t super;
 
     int *proc_locality_arr;
@@ -41,40 +46,44 @@ typedef struct mca_coll_remap_module_t{
 
     struct mca_coll_base_comm_t *cached_base_data;
 
-    int *scotch_bcast_new_root; // array to save reordering of rank 0 when using scotch bcast 
+    int *scotch_bcast_new_root; // array to save reordering of rank 0 when using scotch bcast
 
     // fallback allreduce alg
     mca_coll_base_module_allreduce_fn_t fallback_allreduce_fn;
     mca_coll_base_module_t *fallback_allreduce_module;
     mca_coll_base_module_bcast_fn_t fallback_bcast_fn;
     mca_coll_base_module_t *fallback_bcast_module;
-
+    coll_remap_allreduce_cuda_coll_config_t allreduce_cuda_config;
 } mca_coll_remap_module_t;
 
 OBJ_CLASS_DECLARATION(mca_coll_remap_module_t);
 
-typedef struct mca_coll_remap_component_t{
+typedef struct mca_coll_remap_component_t
+{
     mca_coll_base_component_2_0_0_t super;
     int priority;
     int select_allreduce_alg;
     int select_bcast_alg;
     int turn_off_remap;
     int cc_cluster;
-    char* net_topo_input_mat;
+    char *net_topo_input_mat;
     int use_scotch;
+    int use_gpu_reduce;
+    size_t gpu_reduce_buffer_size;
 } mca_coll_remap_component_t;
 
 OMPI_MODULE_DECLSPEC extern mca_coll_remap_component_t mca_coll_remap_component;
 
 /* This function fills module->proc_locality_arr */
 int mca_coll_remap_set_proc_locality_info(struct ompi_communicator_t *comm,
-                                            mca_coll_remap_module_t *module);
+                                          mca_coll_remap_module_t *module);
 
-int mca_coll_remap_create_new_cached_comm(struct ompi_communicator_t *old_comm, int* mapping,
+int mca_coll_remap_create_new_cached_comm(struct ompi_communicator_t *old_comm, int *mapping,
                                           struct ompi_communicator_t **new_comm);
 
 // stuff for remap_allreduce
-enum MCA_COLL_REMAP_ALLREDUCE_ALG{
+enum MCA_COLL_REMAP_ALLREDUCE_ALG
+{
     REMAP_ALLREDUCE_ALG_IGNORE = 0,
     REMAP_ALLREDUCE_ALG_LINEAR,
     REMAP_ALLREDUCE_ALG_NON_OVERLAP,
@@ -85,8 +94,8 @@ enum MCA_COLL_REMAP_ALLREDUCE_ALG{
     REMAP_ALLREDUCE_ALG_COUNT
 };
 
-int remap_allreduce_pick_alg(int count, struct ompi_datatype_t *dtype, 
-                            struct ompi_communicator_t *comm);
+int remap_allreduce_pick_alg(int count, struct ompi_datatype_t *dtype,
+                             struct ompi_communicator_t *comm);
 
 int remap_allreduce_ring_remap(struct ompi_communicator_t *old_comm,
                                mca_coll_remap_module_t *module,
@@ -97,19 +106,20 @@ int remap_allreduce_rdouble_remap(struct ompi_communicator_t *old_comm,
                                   struct ompi_communicator_t **new_comm);
 
 int remap_allreduce_raben_remap(struct ompi_communicator_t *old_comm,
-                                  mca_coll_remap_module_t *module,
-                                  struct ompi_communicator_t **new_comm);
+                                mca_coll_remap_module_t *module,
+                                struct ompi_communicator_t **new_comm);
 
 int remap_allreduce_linear_remap(struct ompi_communicator_t *old_comm,
-                                  mca_coll_remap_module_t *module,
-                                  struct ompi_communicator_t **new_comm);
+                                 mca_coll_remap_module_t *module,
+                                 struct ompi_communicator_t **new_comm);
 
 int remap_allreduce_scotch_remap(struct ompi_communicator_t *old_comm,
-                              mca_coll_remap_module_t *module,
-                              struct ompi_communicator_t **new_comm, int alg);
+                                 mca_coll_remap_module_t *module,
+                                 struct ompi_communicator_t **new_comm, int alg);
 
 // stuff for remap_bcast
-enum MCA_COLL_REMAP_BCAST_ALG{
+enum MCA_COLL_REMAP_BCAST_ALG
+{
     REMAP_BCAST_ALG_IGNORE = 0,
     REMAP_BCAST_ALG_LINEAR,
     REMAP_BCAST_ALG_CHAIN,
@@ -123,8 +133,9 @@ enum MCA_COLL_REMAP_BCAST_ALG{
     REMAP_BCAST_ALG_COUNT
 };
 
-enum REMAP_CC_CLUSTERS{
-    CC_NULL=0,
+enum REMAP_CC_CLUSTERS
+{
+    CC_NULL = 0,
     CC_NIAGARA,
     CC_MIST,
     CC_CEDAR,
@@ -133,7 +144,7 @@ enum REMAP_CC_CLUSTERS{
     CC_CLUSTER_COUNT
 };
 
-int remap_bcast_pick_alg(int count, struct ompi_datatype_t *datatype,  
+int remap_bcast_pick_alg(int count, struct ompi_datatype_t *datatype,
                          struct ompi_communicator_t *comm);
 
 int remap_bcast_pipeline_remap(struct ompi_communicator_t *old_comm,
@@ -145,21 +156,46 @@ int remap_bcast_binomial_remap(struct ompi_communicator_t *old_comm,
                                struct ompi_communicator_t **new_comm);
 
 int remap_bcast_knomial_remap(struct ompi_communicator_t *old_comm,
-                               mca_coll_remap_module_t *module,
-                               struct ompi_communicator_t **new_comm, int radix);
+                              mca_coll_remap_module_t *module,
+                              struct ompi_communicator_t **new_comm, int radix);
 
 int remap_bcast_scatter_allgather_remap(struct ompi_communicator_t *old_comm,
-                              mca_coll_remap_module_t *module,
-                              struct ompi_communicator_t **new_comm);
+                                        mca_coll_remap_module_t *module,
+                                        struct ompi_communicator_t **new_comm);
 
 int remap_bcast_bintree_remap(struct ompi_communicator_t *old_comm,
                               mca_coll_remap_module_t *module,
                               struct ompi_communicator_t **new_comm);
 
 int remap_bcast_scotch_remap(struct ompi_communicator_t *old_comm,
-                              mca_coll_remap_module_t *module,
-                              struct ompi_communicator_t **new_comm, int alg, int *new_root);
+                             mca_coll_remap_module_t *module,
+                             struct ompi_communicator_t **new_comm, int alg, int *new_root);
+
+int ompi_coll_remap_allreduce_cuda_opt_recursivedoubling(const void *sbuf, void *rbuf,
+                                                         int count,
+                                                         struct ompi_datatype_t *dtype,
+                                                         struct ompi_op_t *op,
+                                                         struct ompi_communicator_t *comm,
+                                                         mca_coll_base_module_t *module,
+                                                         coll_remap_allreduce_cuda_coll_config_t *cuda_config);
+int ompi_coll_remap_allreduce_cuda_opt_ring(const void *sbuf, void *rbuf,
+                                            int count,
+                                            struct ompi_datatype_t *dtype,
+                                            struct ompi_op_t *op,
+                                            struct ompi_communicator_t *comm,
+                                            mca_coll_base_module_t *module,
+                                            coll_remap_allreduce_cuda_coll_config_t *cuda_config);
+
+int ompi_coll_remap_allreduce_cuda_opt_redscat_allgather(const void *sbuf, void *rbuf,
+                                                         int count,
+                                                         struct ompi_datatype_t *dtype,
+                                                         struct ompi_op_t *op,
+                                                         struct ompi_communicator_t *comm,
+                                                         mca_coll_base_module_t *module,
+                                                         coll_remap_allreduce_cuda_coll_config_t *cuda_config);
+
+void intialize_cuda_helpers(coll_remap_allreduce_cuda_coll_config_t *config);
 
 END_C_DECLS
 
-#endif //MCA_COLL_REMAP_EXPORT_H 
+#endif //MCA_COLL_REMAP_EXPORT_H

@@ -1,3 +1,6 @@
+#include "cuda_runtime.h"
+#include "cuda.h"
+
 #include "coll_remap.h"
 
 #include "opal/util/show_help.h"
@@ -6,6 +9,8 @@
 #include "ompi/communicator/communicator.h"
 #include "ompi/mca/coll/base/base.h"
 #include "ompi/mca/coll/base/coll_base_functions.h"
+
+void destruct_cuda_helpers(coll_remap_allreduce_cuda_coll_config_t *config);
 
 static void mca_coll_remap_module_construct(mca_coll_remap_module_t *module)
 {
@@ -22,6 +27,8 @@ static void mca_coll_remap_module_construct(mca_coll_remap_module_t *module)
     module->fallback_allreduce_module = NULL;
     module->fallback_bcast_fn = NULL;
     module->fallback_bcast_module = NULL;
+    module->allreduce_cuda_config.cuda_buff[0] = NULL;
+    module->allreduce_cuda_config.cuda_buff[1] = NULL;
 }
 
 static void mca_coll_remap_module_destruct(mca_coll_remap_module_t *module)
@@ -73,7 +80,10 @@ static void mca_coll_remap_module_destruct(mca_coll_remap_module_t *module)
         OBJ_RELEASE(module->fallback_bcast_module);
     }
     module->fallback_bcast_module = NULL;
+
+    destruct_cuda_helpers(&module->allreduce_cuda_config);
 }
+
 OBJ_CLASS_INSTANCE(mca_coll_remap_module_t, mca_coll_base_module_t,
                    mca_coll_remap_module_construct,
                    mca_coll_remap_module_destruct);
@@ -177,7 +187,7 @@ int mca_coll_remap_module_enable(mca_coll_base_module_t *module,
         return OMPI_ERROR;
     }
 
-    m->scotch_bcast_new_root = (int*) malloc(REMAP_BCAST_ALG_COUNT * sizeof(int));
+    m->scotch_bcast_new_root = (int *)malloc(REMAP_BCAST_ALG_COUNT * sizeof(int));
     if (NULL == m->scotch_bcast_new_root)
     {
         opal_output_verbose(1, ompi_coll_base_framework.framework_output,
@@ -234,4 +244,24 @@ int mca_coll_remap_module_enable(mca_coll_base_module_t *module,
 
     OPAL_OUTPUT((ompi_coll_remap_stream, "coll:remap:module_enable exited sussesfully"));
     return OMPI_SUCCESS;
+}
+
+void intialize_cuda_helpers(coll_remap_allreduce_cuda_coll_config_t *config)
+{
+    size_t gpu_buffer_size;
+    
+    gpu_buffer_size = mca_coll_remap_component.gpu_reduce_buffer_size;
+
+    // Allocate GPU memory
+    int ret1 = cuMemAlloc((CUdeviceptr *)(uintptr_t)&config->cuda_buff[0], gpu_buffer_size);
+    int ret2 = cuMemAlloc((CUdeviceptr *)(uintptr_t)&config->cuda_buff[1], gpu_buffer_size);
+
+    OPAL_OUTPUT((ompi_coll_remap_stream, "coll:remap:init_cuda_helpers cuda ret codes: %d, %d", ret1, ret2));
+}
+
+void destruct_cuda_helpers(coll_remap_allreduce_cuda_coll_config_t *config)
+{
+    cudaFree(config->cuda_buff[0]);
+    config->cuda_buff[0] = NULL;
+    cudaFree(config->cuda_buff[1]);
 }

@@ -41,6 +41,8 @@ mca_coll_remap_component_t mca_coll_remap_component = {
     .cc_cluster = 0,
     .net_topo_input_mat = NULL,
     .use_scotch = 0,
+    .use_gpu_reduce = 0,
+    .gpu_reduce_buffer_size = (1<<24), // default size 16MB
 };
 
 static int remap_open(void)
@@ -109,5 +111,17 @@ static int remap_register(void)
                                           MCA_BASE_VAR_TYPE_INT, NULL, 0, 0, OPAL_INFO_LVL_6,
                                           MCA_BASE_VAR_SCOPE_READONLY,
                                           &(mca_coll_remap_component.use_scotch));
+
+    (void)mca_base_component_var_register(&mca_coll_remap_component.super.collm_version,
+                                          "use_gpu_reduce", "use gpu redution for allreduce collectives",
+                                          MCA_BASE_VAR_TYPE_INT, NULL, 0, 0, OPAL_INFO_LVL_6,
+                                          MCA_BASE_VAR_SCOPE_READONLY,
+                                          &(mca_coll_remap_component.use_gpu_reduce));
+
+    (void)mca_base_component_var_register(&mca_coll_remap_component.super.collm_version,
+                                          "gpu_reduce_buffer_size", "size of gpu buffer for gpu reduce",
+                                          MCA_BASE_VAR_TYPE_SIZE_T, NULL, 0, 0, OPAL_INFO_LVL_6,
+                                          MCA_BASE_VAR_SCOPE_READONLY,
+                                          &(mca_coll_remap_component.gpu_reduce_buffer_size));
     return OMPI_SUCCESS;
 }
