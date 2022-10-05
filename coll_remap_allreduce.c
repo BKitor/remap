@@ -10,15 +10,18 @@
 #include "ompi/mca/coll/remap/coll_remap_scotch.h"
 #include "opal/datatype/opal_datatype_cuda.h"
 
+int remap_allreduce_pick_alg(int count, struct ompi_datatype_t *dtype,
+                             struct ompi_communicator_t *comm);
+int remap_allreduce_pick_gpu_alg(int cont, struct ompi_datatype_t *dtype, struct ompi_communicator_t *comm);
+
 /*
 1. based on the comm, decide which algorithm to run, should be similar to tuned's decision
 2. check if a cached communicator exists on the module
     2a. if exists, ur gucci
     2b. if it doesn't exist, create and cache the new comm
 3. call the alg with the cached comm
-
-    
 */
+
 int mca_coll_remap_allreduce_intra(const void *sbuf, void *rbuf, int count,
                                    struct ompi_datatype_t *dtype,
                                    struct ompi_op_t *op,
@@ -30,23 +33,36 @@ int mca_coll_remap_allreduce_intra(const void *sbuf, void *rbuf, int count,
     int alg, ret;
 
     int is_cuda_buffer = opal_cuda_check_bufs((char *)sbuf, (char *)rbuf);
-    int use_gpu_reduce = is_cuda_buffer && OMPI_OP_SUM == op->op_type 
-        && mca_coll_remap_component.use_gpu_reduce;
+    int use_gpu_reduce = is_cuda_buffer && OMPI_OP_SUM == op->op_type && mca_coll_remap_component.use_gpu_reduce;
 
     // OPAL_OUTPUT((ompi_coll_remap_stream, "coll:remap:allreduce use_cuda_reduce set to :%d", use_gpu_reduce));
     // OPAL_OUTPUT((ompi_coll_remap_stream, "coll:remap:allreduce ", is_cuda_buffer, ));
-    if (use_gpu_reduce && remap_module->allreduce_cuda_config.cuda_buff[0] == NULL){
+    if (use_gpu_reduce && remap_module->allreduce_cuda_config.cuda_buff[0] == NULL)
+    {
         OPAL_OUTPUT((ompi_coll_remap_stream, "coll:remap:allreduce initializeing cuda buffer"));
         intialize_cuda_helpers(&remap_module->allreduce_cuda_config);
     }
 
     if (!ompi_op_is_commute(op))
     {
-        /* Can only do commutative atm */
+        /* Can only do commutative */
         goto ar_abort;
     }
+    
+    // alg = (mca_coll_remap_component.select_allreduce_alg) ? mca_coll_remap_component.select_allreduce_alg : remap_allreduce_pick_alg(count, dtype, comm);
 
-    alg = (mca_coll_remap_component.select_allreduce_alg) ? mca_coll_remap_component.select_allreduce_alg : remap_allreduce_pick_alg(count, dtype, comm);
+    if (mca_coll_remap_component.select_allreduce_alg){
+        alg = mca_coll_remap_component.select_allreduce_alg;
+    }
+    else{
+        if(use_gpu_reduce){
+            alg = remap_allreduce_pick_gpu_alg(count, dtype, comm);
+        }else{
+            alg = remap_allreduce_pick_alg(count, dtype, comm);
+        }
+    }
+
+
     if (alg < 0 || alg >= REMAP_ALLREDUCE_ALG_COUNT)
     {
         OPAL_OUTPUT((ompi_coll_remap_stream, "coll:remap:allreduce alg %d isn't a valid alg, choose between 0 and %d, ABORTING",
@@ -58,14 +74,13 @@ int mca_coll_remap_allreduce_intra(const void *sbuf, void *rbuf, int count,
         OPAL_OUTPUT((ompi_coll_remap_stream, "coll:remap:allreduce WARNING allreduce_linear seg faults on Beluga, switching to ring"));
         alg = REMAP_ALLREDUCE_ALG_RING;
     }
-    int rsa_nsteps = opal_hibit(ompi_comm_size(comm), comm->c_cube_dim + 1);   /* ilog2(comm_size) */
+    int rsa_nsteps = opal_hibit(ompi_comm_size(comm), comm->c_cube_dim + 1); /* ilog2(comm_size) */
     assert(rsa_nsteps >= 0);
-    int rsa_nprocs_pof2 = 1 << rsa_nsteps;                              /* flp2(comm_size) */
+    int rsa_nprocs_pof2 = 1 << rsa_nsteps; /* flp2(comm_size) */
     if (alg == REMAP_ALLREDUCE_ALG_RABENSEIFNER && (count < rsa_nprocs_pof2 || !ompi_op_is_commute(op)))
     {
         OPAL_OUTPUT((ompi_coll_remap_stream, "coll:remap:allreduce WARNING allreduce_rsa will revert to linear and seg fault on Beluga, switching to ring"));
         alg = REMAP_ALLREDUCE_ALG_RING;
-
     }
 
     // if remap is off, just stick with the communicator passed in
@@ -142,9 +157,9 @@ int mca_coll_remap_allreduce_intra(const void *sbuf, void *rbuf, int count,
                 break;
             }
     }
-    
+
     if (use_gpu_reduce)
-            OPAL_OUTPUT((ompi_coll_remap_stream, "coll:remap:allreduce using CUDA REDUCE"));
+        OPAL_OUTPUT((ompi_coll_remap_stream, "coll:remap:allreduce using CUDA REDUCE"));
 
     switch (alg)
     {
@@ -157,37 +172,37 @@ int mca_coll_remap_allreduce_intra(const void *sbuf, void *rbuf, int count,
                                                             ar_comm, ar_comm->c_coll->coll_allreduce_module);
         break;
     case REMAP_ALLREDUCE_ALG_RECURSIVE_DOUBLING:
-        if(use_gpu_reduce)
+        if (use_gpu_reduce)
             ret = ompi_coll_remap_allreduce_cuda_opt_recursivedoubling(sbuf, rbuf, count, dtype, op,
-                                                               ar_comm, ar_comm->c_coll->coll_allreduce_module,
-                                                               &remap_module->allreduce_cuda_config);
+                                                                       ar_comm, ar_comm->c_coll->coll_allreduce_module,
+                                                                       &remap_module->allreduce_cuda_config);
         else
             ret = ompi_coll_base_allreduce_intra_recursivedoubling(sbuf, rbuf, count, dtype, op,
-                                                               ar_comm, ar_comm->c_coll->coll_allreduce_module);
+                                                                   ar_comm, ar_comm->c_coll->coll_allreduce_module);
         break;
     case REMAP_ALLREDUCE_ALG_SEGMENTED_RING:
-        if(use_gpu_reduce)
+        if (use_gpu_reduce)
             ret = ompi_coll_remap_allreduce_cuda_opt_ring(sbuf, rbuf, count, dtype, op, ar_comm,
-                                                                ar_comm->c_coll->coll_allreduce_module,
-                                                               &remap_module->allreduce_cuda_config);
+                                                          ar_comm->c_coll->coll_allreduce_module,
+                                                          &remap_module->allreduce_cuda_config);
         else
             ret = ompi_coll_base_allreduce_intra_ring_segmented(sbuf, rbuf, count, dtype, op, ar_comm,
                                                                 ar_comm->c_coll->coll_allreduce_module, 0);
         break;
     case REMAP_ALLREDUCE_ALG_RING:
-        if(use_gpu_reduce)
+        if (use_gpu_reduce)
             ret = ompi_coll_remap_allreduce_cuda_opt_ring(sbuf, rbuf, count, dtype, op, ar_comm,
-                                                                ar_comm->c_coll->coll_allreduce_module,
-                                                               &remap_module->allreduce_cuda_config);
+                                                          ar_comm->c_coll->coll_allreduce_module,
+                                                          &remap_module->allreduce_cuda_config);
         else
             ret = ompi_coll_base_allreduce_intra_ring(sbuf, rbuf, count, dtype, op, ar_comm,
                                                       ar_comm->c_coll->coll_allreduce_module);
         break;
     case REMAP_ALLREDUCE_ALG_RABENSEIFNER:
-        if(use_gpu_reduce)
+        if (use_gpu_reduce)
             ret = ompi_coll_remap_allreduce_cuda_opt_redscat_allgather(sbuf, rbuf, count, dtype, op,
-                                                                   ar_comm, ar_comm->c_coll->coll_allreduce_module,
-                                                                   &remap_module->allreduce_cuda_config);
+                                                                       ar_comm, ar_comm->c_coll->coll_allreduce_module,
+                                                                       &remap_module->allreduce_cuda_config);
         else
             ret = ompi_coll_base_allreduce_intra_redscat_allgather(sbuf, rbuf, count, dtype, op,
                                                                    ar_comm, ar_comm->c_coll->coll_allreduce_module);
@@ -752,6 +767,64 @@ int remap_allreduce_pick_alg(int count, struct ompi_datatype_t *dtype,
             alg = 6;
         }
     }
+
+    return alg;
+}
+
+int remap_allreduce_pick_gpu_alg(int count, struct ompi_datatype_t *dtype, struct ompi_communicator_t *comm)
+{
+    int communicator_size, alg;
+    size_t total_dsize, dsize;
+
+    communicator_size = ompi_comm_size(comm);
+    ompi_datatype_type_size(dtype, &dsize);
+    total_dsize = dsize * (ptrdiff_t)count;
+
+    // assumes world_size == 64 (4ppn*16n)
+    // if (total_dsize < 8)
+    // {
+    //     alg = 3;
+    // }
+    // else if (total_dsize < 16)
+    // {
+    //     alg = 4;
+    // }
+    // else if (total_dsize < 32)
+    // {
+    //     alg = 6;
+    // }
+    // else if (total_dsize < 128)
+    // {
+    //     alg = 3;
+    // }
+    // else if (total_dsize < 256)
+    // {
+    //     alg = 4;
+    // }
+    // else if (total_dsize < 32768)
+    // {
+    //     alg = 6;
+    // }
+    // else if (total_dsize < 262144)
+    // {
+    //     alg = 3;
+    // }
+    // else if (total_dsize < 524288)
+    // {
+    //     alg = 6;
+    // }
+    // else
+    // {
+    //     alg = 3;
+    // }
+    
+    // Yiltan's "Tuning Table"
+    if (total_dsize < 8192)
+        alg = 3;
+    else if (total_dsize < 8388608)
+        alg = 6;
+    else
+        alg = 4;
 
     return alg;
 }

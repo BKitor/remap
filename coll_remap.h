@@ -94,8 +94,6 @@ enum MCA_COLL_REMAP_ALLREDUCE_ALG
     REMAP_ALLREDUCE_ALG_COUNT
 };
 
-int remap_allreduce_pick_alg(int count, struct ompi_datatype_t *dtype,
-                             struct ompi_communicator_t *comm);
 
 int remap_allreduce_ring_remap(struct ompi_communicator_t *old_comm,
                                mca_coll_remap_module_t *module,

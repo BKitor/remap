@@ -29,5 +29,5 @@ mca_coll_remap_la_LIBADD = $(top_builddir)/ompi/lib@OMPI_LIBMPI_NAME@.la
 
 noinst_LTLIBRARIES = $(component_noinst)
 libmca_coll_remap_la_SOURCES =$(sources)
-libmca_coll_remap_la_LDFLAGS = -module -avoid-version -libverbs -L/home/bkitor/scotch-v6.1.0/lib/ -lscotch -lscotcherr
+libmca_coll_remap_la_LDFLAGS = -module -avoid-version -libverbs -L/home/bkitor/scotch-v6.1.0/lib/ -lscotch -lscotcherr -lkernel -L$(top_builddir)/ompi/mca/coll/remap/kernel
 libmca_coll_remap_la_CFLAGS = -I/home/bkitor/scotch-v6.1.0/include/
